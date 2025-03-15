@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public struct GameplayInput
@@ -29,14 +30,19 @@ public class SimplePlayerController : MonoBehaviour
 
     [Header("Sounds")]
     public AudioSource FootstepSound;
-    public AudioSource AudioSource;  // New AudioSource for Jump & Land sounds
+    public AudioSource AudioSource;
     public AudioClip JumpAudioClip;
     public AudioClip LandAudioClip;
+
+    [Header("Respawn Settings")]
+    [SerializeField] private float fallThreshold = -10f;  // Y-position at which player respawns
+    [SerializeField] private List<Transform> respawnPlatforms; // Assign platforms in the Inspector
+    public List<Transform> RespawnPlatforms { set { respawnPlatforms = value; } }
 
     private GameplayInput _input;
     private Vector3 velocity;
     private bool isGrounded;
-    private bool wasGrounded; // Track previous frame's grounded state
+    private bool wasGrounded;
 
     // Animator Parameters
     private int _animIDSpeed;
@@ -44,20 +50,10 @@ public class SimplePlayerController : MonoBehaviour
 
     void Start()
     {
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
-
         _input.LookRotation = new Vector2(InitialLookRotation, 0f);
 
         AssignAnimationIDs();
         wasGrounded = controller.isGrounded;
-    }
-
-    public void ResetInput()
-    {
-        _input.MoveDirection = default;
-        _input.Jump = false;
-        _input.Sprint = false;
     }
 
     private void Update()
@@ -76,6 +72,12 @@ public class SimplePlayerController : MonoBehaviour
 
         ProcessMovement();
         HandleAnimations();
+
+        // Check if the player has fallen below the threshold
+        if (transform.position.y < fallThreshold)
+        {
+            RespawnPlayer();
+        }
     }
 
     private void ProcessMovement()
@@ -95,14 +97,12 @@ public class SimplePlayerController : MonoBehaviour
         float speed = _input.Sprint ? sprintSpeed : walkSpeed;
         moveDirection *= speed;
 
-        // Jump Logic
         if (_input.Jump && isGrounded)
         {
             velocity.y = jumpForce;
-            PlayJumpSound(); // Play Jump Sound
+            PlayJumpSound();
         }
 
-        // Apply Gravity
         velocity.y -= gravity * Time.deltaTime;
 
         if (moveDirection.magnitude > 0)
@@ -115,9 +115,26 @@ public class SimplePlayerController : MonoBehaviour
         velocity.z = moveDirection.z;
         controller.Move(velocity * Time.deltaTime);
 
-        HandleLandingSound(); // Check for landing sound trigger
-
+        HandleLandingSound();
         _input.Jump = false;
+    }
+
+    private void RespawnPlayer()
+    {
+        if (respawnPlatforms.Count == 0)
+        {
+            Debug.LogError("No respawn platforms assigned!");
+            return;
+        }
+
+        Transform respawnPlatform = respawnPlatforms[Random.Range(0, respawnPlatforms.Count)];
+        Vector3 respawnPosition = respawnPlatform.position + Vector3.up * 2f; // Slightly above platform
+
+        controller.enabled = false; // Disable controller before teleporting
+        transform.position = respawnPosition;
+        controller.enabled = true;  // Re-enable after teleporting
+
+        velocity = Vector3.zero; // Reset velocity
     }
 
     private void HandleAnimations()
@@ -135,11 +152,11 @@ public class SimplePlayerController : MonoBehaviour
 
     private void HandleLandingSound()
     {
-        if (!wasGrounded && isGrounded) // If player was in air & now landed
+        if (!wasGrounded && isGrounded)
         {
             PlayLandSound();
         }
-        wasGrounded = isGrounded; // Update last frame's ground state
+        wasGrounded = isGrounded;
     }
 
     private void PlayJumpSound()

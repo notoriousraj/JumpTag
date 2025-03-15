@@ -20,6 +20,7 @@ public class BotController : MonoBehaviour
 
     void Start()
     {
+        player = GameObject.FindGameObjectWithTag("Player").transform;
         agent = GetComponent<NavMeshAgent>();
 
         if (agent == null)
@@ -56,6 +57,15 @@ public class BotController : MonoBehaviour
         HandleJumping();
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player")) // Ensure the player has the "Player" tag
+        {
+            GameManager.Instance.BotCaught();
+            Destroy(gameObject); // Destroy the bot on collision
+        }
+    }
+
     void RunAwayFromPlayer()
     {
         Vector3 direction = transform.position - player.position;
@@ -82,18 +92,18 @@ public class BotController : MonoBehaviour
         if (distanceToPlayer < panicDistance)
         {
             agent.speed = moveSpeed * panicSpeedMultiplier;
+            updateInterval = 0.1f; // React faster when in danger
         }
         else
         {
             agent.speed = moveSpeed;
+            updateInterval = 0.3f; // Slower updates when safe
         }
     }
 
     bool IsStuck()
     {
-        bool stuck = Vector3.Distance(transform.position, lastPosition) < stuckCheckDistance;
-        lastPosition = transform.position;
-        return stuck;
+        return agent.velocity.magnitude < 0.1f; // Check if the bot is actually moving
     }
 
     void JumpToNewPlatform()
@@ -116,24 +126,27 @@ public class BotController : MonoBehaviour
 
     IEnumerator JumpAcross()
     {
+        if (!agent.isOnOffMeshLink) yield break; // Prevent unnecessary jumps
+
         OffMeshLinkData link = agent.currentOffMeshLinkData;
         Vector3 startPos = agent.transform.position;
         Vector3 endPos = link.endPos;
         float elapsedTime = 0f;
         float jumpDuration = 0.5f;
 
-        agent.enabled = false; // Temporarily disable NavMeshAgent to simulate jump
+        agent.enabled = false; // Temporarily disable movement
 
         while (elapsedTime < jumpDuration)
         {
-            transform.position = Vector3.Lerp(startPos, endPos, elapsedTime / jumpDuration);
-            elapsedTime += Time.deltaTime * jumpSpeed;
+            float t = elapsedTime / jumpDuration;
+            transform.position = Vector3.Lerp(startPos, endPos, t) + Vector3.up * Mathf.Sin(t * Mathf.PI); // Arc-like jump
+            elapsedTime += Time.deltaTime;
             yield return null;
         }
 
         transform.position = endPos;
-        agent.enabled = true; // Re-enable NavMeshAgent
-        agent.CompleteOffMeshLink();
+        agent.enabled = true;
+        agent.CompleteOffMeshLink(); // Mark the link as completed
     }
 
     void HandleJumping()

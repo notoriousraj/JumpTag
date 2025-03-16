@@ -72,7 +72,7 @@ public class BotController : MonoBehaviour
         direction.y = 0;
 
         Vector3 newTarget = transform.position + direction.normalized * safeDistance;
-        Debug.Log("New Target Position: " + newTarget);
+        // Debug.Log("New Target Position: " + newTarget);
 
         if (NavMesh.SamplePosition(newTarget, out NavMeshHit hit, 5f, NavMesh.AllAreas))
         {

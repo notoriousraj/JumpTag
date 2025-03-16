@@ -27,7 +27,7 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        if (isGameActive)
+        if (isGameActive && !UIManager.Instance.IsPaused)
         {
             timeRemaining -= Time.deltaTime;
             UIManager.Instance.UpdateTimer(timeRemaining);
@@ -41,6 +41,8 @@ public class GameManager : MonoBehaviour
 
     public void StartGame()
     {
+        Destroy(GameObject.FindGameObjectWithTag("It"));
+
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 

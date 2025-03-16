@@ -20,6 +20,7 @@ public class UIManager : MonoBehaviour
 
     [Header("Play Mode Panel")]
     [SerializeField] private GameObject playModePanel;
+    [SerializeField] private GameObject pausePanel;
     [SerializeField] private Button pauseButton;
     [SerializeField] private Button resumeButton;
     [SerializeField] private Button mainMenu2Button;
@@ -30,6 +31,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject gameOverPanel;
 
     private string playerName;
+    private bool isPaused = false;
+    public bool IsPaused { get { return isPaused; } }
 
     private void Awake()
     {
@@ -47,6 +50,8 @@ public class UIManager : MonoBehaviour
         retryButton.onClick.AddListener(OnRetryGame);
         exitButton.onClick.AddListener(OnExitGame);
         mainMenuButton.onClick.AddListener(OnMainMenu);
+        pauseButton.onClick.AddListener(OnPauseGame);
+        resumeButton.onClick.AddListener(OnResumeGame);
         mainMenu2Button.onClick.AddListener(OnMainMenu);
     }
 
@@ -55,6 +60,12 @@ public class UIManager : MonoBehaviour
         playerName = PlayerPrefs.GetString("PlayerName", ""); // Default to empty string
         if (!string.IsNullOrEmpty(playerName))
             nameInput.text = playerName;
+    }
+
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape) && playModePanel.activeInHierarchy == true)
+            OnPauseGame();
     }
 
     private void OnStartGame()
@@ -84,6 +95,26 @@ public class UIManager : MonoBehaviour
     private void OnMainMenu()
     {
         ChangeGameState(GameState.Menu);
+        isPaused = false;
+        pausePanel.SetActive(false);
+    }
+
+    private void OnPauseGame()
+    {
+        isPaused = true;  // Stop the timer updates
+        pausePanel.SetActive(true);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    private void OnResumeGame()
+    {
+        isPaused = false;  // Resume the timer updates
+        pausePanel.SetActive(false);
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 
     public void ChangeGameState(GameState gameState)
@@ -95,6 +126,7 @@ public class UIManager : MonoBehaviour
 
     public void UpdateTimer(float timeRemaining)
     {
+        if (isPaused) return; // Prevent updating the timer when paused
         timerText.text = "Time Remaining \n" + Mathf.CeilToInt(timeRemaining) + "s";
     }
 

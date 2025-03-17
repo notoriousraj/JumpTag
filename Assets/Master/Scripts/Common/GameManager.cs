@@ -2,6 +2,8 @@ using System;
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.AI;
+using Solana.Unity.SDK;
+using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
@@ -11,11 +13,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private SimplePlayerController player;
     [SerializeField] private BotController botPrefab;
     [SerializeField] private List<Transform> platforms;
+    [SerializeField] private CatoffChallengeAPI catoffChallengeAPI;
 
     private int score = 0;
-    private float gameDuration = 60f; // Game duration in seconds
+    private float gameDuration = 15f; // Game duration in seconds
     private float timeRemaining;
     private bool isGameActive = false;
+    public ResponseData challengeResponse;
 
     private void Awake()
     {
@@ -48,15 +52,76 @@ public class GameManager : MonoBehaviour
 
         score = 0;
         timeRemaining = gameDuration;
-        isGameActive = true;
+        isGameActive = false; // Set to false initially until API calls succeed
 
         UIManager.Instance.UpdateScore(score);
         UIManager.Instance.ToggleGameOverPanel(false);
 
+        player.gameObject.SetActive(false); // Keep player inactive until API response
+
+        StartCoroutine(CreateChallengeAndStartGame());
+        // player.gameObject.SetActive(true);
+        // player.RespawnPlatforms = platforms;
+        // SpawnBotOnRandomPlatform();
+        // isGameActive = true;
+    }
+
+    private IEnumerator CreateChallengeAndStartGame()
+    {
+        string challengeName = "Jump Tag Challenge";
+        string challengeDescription = "Tag the bots before time runs out!";
+        long startDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        long endDate = startDate + (long)gameDuration;
+        float wager = 0.01f;
+        int target = 100;
+
+        yield return catoffChallengeAPI.CreateChallenge(
+            challengeName,
+            challengeDescription,
+            startDate,
+            endDate,
+            wager,
+            (response) =>
+            {
+                Debug.Log("Challenge Created: " + response);
+                challengeResponse = JsonUtility.FromJson<ResponseData>(response);
+                Debug.Log("Parsed Challenge ID: " + challengeResponse.data.ChallengeID);
+
+            },
+            target
+        );
+
+        if (challengeResponse.data.ChallengeID == -1)
+        {
+            Debug.LogError("Failed to create challenge, cannot start game.");
+            yield break;
+        }
+
+        // Step 2: Create Player
+        bool playerCreated = false;
+        yield return catoffChallengeAPI.CreatePlayer(
+            challengeResponse.data.ChallengeID,
+            Web3.Account.PublicKey, // Player's wallet address
+            (response) =>
+            {
+                Debug.Log("Player Registered: " + response);
+                playerCreated = true;
+            }
+        );
+
+        if (!playerCreated)
+        {
+            Debug.LogError("Failed to create player, cannot start game.");
+            yield break;
+        }
+
+        // Step 3: Start the game after successful API calls
         player.gameObject.SetActive(true);
         player.RespawnPlatforms = platforms;
         SpawnBotOnRandomPlatform();
+        isGameActive = true;
     }
+
 
     public void BotCaught()
     {
@@ -92,9 +157,35 @@ public class GameManager : MonoBehaviour
         isGameActive = false;
         player.gameObject.SetActive(false);
         UIManager.Instance.ToggleGameOverPanel(true);
-        Debug.Log("Game Over! Final Score: " + score);
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        int challengeID = challengeResponse.data.ChallengeID;
+        int updatedScore = score;
+        string userAddress = Web3.Account.PublicKey;
+
+        Debug.Log("Game Over! Final Score: " + updatedScore);
+
+        // Start the coroutine properly
+        StartCoroutine(catoffChallengeAPI.UpdatePlayerScore(challengeID, updatedScore, userAddress, (response) =>
+        {
+            Debug.Log("Score update response: " + response);
+        }));
     }
 }
+
+[Serializable]
+public class ResponseData
+{
+    public bool success;
+    public string message;
+    public ChallengeCreateData data;
+}
+
+[Serializable]
+public class ChallengeCreateData
+{
+    public int ChallengeID;
+}
+

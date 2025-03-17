@@ -1,4 +1,5 @@
 using System;
+using Solana.Unity.SDK;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,9 +10,14 @@ public class UIManager : MonoBehaviour
 
     [Header("Start Panel")]
     [SerializeField] private GameObject startPanel;
-    [SerializeField] private TMP_InputField nameInput;
+    [SerializeField] private Button walletButton;
     [SerializeField] private Button startButton;
     [SerializeField] private Button exitButton;
+
+    [Header("Confirmation Panel")]
+    [SerializeField] private GameObject confirmationPanel;
+    [SerializeField] private Button confirmButton;
+    [SerializeField] private Button cancelButton;
 
     [Header("Retry Panel")]
     [SerializeField] private GameObject retryPanel;
@@ -29,8 +35,8 @@ public class UIManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI timerText;
     [SerializeField] private TextMeshProUGUI scoreText;
     [SerializeField] private GameObject gameOverPanel;
-
-    private string playerName;
+    [Header("Crypto")]
+    [SerializeField] private SolanaTransactionExample solanaTransactionExample;
     private bool isPaused = false;
     public bool IsPaused { get { return isPaused; } }
 
@@ -49,6 +55,8 @@ public class UIManager : MonoBehaviour
         startButton.onClick.AddListener(OnStartGame);
         retryButton.onClick.AddListener(OnRetryGame);
         exitButton.onClick.AddListener(OnExitGame);
+        confirmButton.onClick.AddListener(OnConfirmGame);
+        cancelButton.onClick.AddListener(OnCancelGame);
         mainMenuButton.onClick.AddListener(OnMainMenu);
         pauseButton.onClick.AddListener(OnPauseGame);
         resumeButton.onClick.AddListener(OnResumeGame);
@@ -57,10 +65,30 @@ public class UIManager : MonoBehaviour
 
     private void Start()
     {
-        playerName = PlayerPrefs.GetString("PlayerName", ""); // Default to empty string
-        if (!string.IsNullOrEmpty(playerName))
-            nameInput.text = playerName;
+        // Check initial wallet connection state
+        UpdateWalletButtonText();
+
+        // Subscribe to wallet connection event
+        Web3.OnLogin += (account) =>
+        {
+            Debug.Log($"Wallet connected: {account.PublicKey}");
+            UpdateWalletButtonText();
+        };
     }
+
+    // Method to update wallet button text
+    private void UpdateWalletButtonText()
+    {
+        if (Web3.Account != null && !string.IsNullOrEmpty(Web3.Account.PublicKey))
+        {
+            walletButton.GetComponentInChildren<TextMeshProUGUI>().text = "Connected";
+        }
+        else
+        {
+            walletButton.GetComponentInChildren<TextMeshProUGUI>().text = "Connect \nWallet";
+        }
+    }
+
 
     private void Update()
     {
@@ -70,21 +98,46 @@ public class UIManager : MonoBehaviour
 
     private void OnStartGame()
     {
-        if (string.IsNullOrEmpty(nameInput.text))
+        // Check if wallet is connected before allowing game start
+        if (Web3.Account == null || string.IsNullOrEmpty(Web3.Account.PublicKey))
+        {
+            Debug.LogError("Wallet not connected! Please connect your wallet before starting the game.");
             return;
+        }
 
-        playerName = nameInput.text;
-        PlayerPrefs.SetString("PlayerName", playerName);
-        PlayerPrefs.Save();
+        confirmationPanel.SetActive(true);
+    }
 
+    public async void OnConfirmGame()
+    {
+        bool transactionSuccess = await solanaTransactionExample.TransferEntryFeeToEscrow();
+        if (transactionSuccess)
+        {
+            OnConfirm();
+        }
+        else
+        {
+            Debug.LogError("❌ Transaction failed. Cannot proceed.");
+            confirmationPanel.SetActive(false);
+            OnConfirm();
+        }
+    }
+
+    private void OnConfirm()
+    {
         GameManager.Instance.StartGame();
+        confirmationPanel.SetActive(false);
         ChangeGameState(GameState.Game);
+    }
+
+    void OnCancelGame()
+    {
+        confirmationPanel.SetActive(false);
     }
 
     private void OnRetryGame()
     {
-        GameManager.Instance.StartGame();
-        ChangeGameState(GameState.Game);
+        confirmationPanel.SetActive(true);
     }
 
     private void OnExitGame()
@@ -119,6 +172,9 @@ public class UIManager : MonoBehaviour
 
     public void ChangeGameState(GameState gameState)
     {
+        if (gameState == GameState.Menu)
+            LeaderboardManager.Instance.FetchLeaderboard();
+            
         startPanel.SetActive(gameState == GameState.Menu);
         playModePanel.SetActive(gameState == GameState.Game);
         retryPanel.SetActive(gameState == GameState.GameOver);
@@ -145,7 +201,11 @@ public class UIManager : MonoBehaviour
         startButton.onClick.RemoveListener(OnStartGame);
         retryButton.onClick.RemoveListener(OnRetryGame);
         exitButton.onClick.RemoveListener(OnExitGame);
+        confirmButton.onClick.RemoveListener(OnConfirmGame);
+        cancelButton.onClick.RemoveListener(OnCancelGame);
         mainMenuButton.onClick.RemoveListener(OnMainMenu);
+        pauseButton.onClick.RemoveListener(OnPauseGame);
+        resumeButton.onClick.RemoveListener(OnResumeGame);
         mainMenu2Button.onClick.RemoveListener(OnMainMenu);
     }
 }
